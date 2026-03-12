@@ -240,7 +240,7 @@ export function RenderStatusClient({ job: initialJob, runId, videoDraftId }: Ren
             <CardTitle>Render Logs</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-1 font-mono text-xs bg-muted p-4 rounded-lg overflow-auto max-h-96">
+            <div className="space-y-1 font-mono text-xs bg-secondary/70 border border-border/60 p-4 rounded-lg overflow-auto max-h-96">
               {logs.map((log, idx) => (
                 <div key={idx} className="text-muted-foreground">
                   {log}

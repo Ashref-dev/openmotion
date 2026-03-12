@@ -44,7 +44,10 @@ export function AssetGallery({ assets }: AssetGalleryProps) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
       {assets.map((asset) => (
-        <Card key={asset.id} className="overflow-hidden">
+        <Card
+          key={asset.id}
+          className="overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_45px_-30px_rgba(22,12,51,0.5)]"
+        >
           <CardContent className="p-0">
             <div className="relative aspect-square">
               <Image

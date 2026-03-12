@@ -4,6 +4,24 @@ import { db } from '@/lib/db';
 import { videoDrafts } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
+import { VIDEO_CONFIG } from '@/lib/config';
+
+const createDraftSchema = z.object({
+  projectId: z.string().uuid('Invalid project ID'),
+  templateId: z.string().min(1, 'Template ID is required'),
+  ratio: z.enum(['9:16', '16:9', '1:1'], { message: 'Invalid aspect ratio' }),
+  fps: z.number().int().min(1).max(120).optional(),
+  durationInFrames: z.number().int().min(VIDEO_CONFIG.duration.minFrames).max(VIDEO_CONFIG.duration.maxFrames),
+  propsJson: z.record(z.string(), z.unknown()),
+});
+
+const updateDraftSchema = z.object({
+  ratio: z.enum(['9:16', '16:9', '1:1']).optional(),
+  fps: z.number().int().min(1).max(120).optional(),
+  durationInFrames: z.number().int().min(VIDEO_CONFIG.duration.minFrames).max(VIDEO_CONFIG.duration.maxFrames).optional(),
+  propsJson: z.record(z.string(), z.unknown()).optional(),
+}).passthrough();
 
 export async function createVideoDraft(data: {
   projectId: string;
@@ -13,6 +31,10 @@ export async function createVideoDraft(data: {
   durationInFrames: number;
   propsJson: Record<string, unknown>;
 }) {
+  const validation = createDraftSchema.safeParse(data);
+  if (!validation.success) {
+    return { success: false, error: validation.error.issues[0]?.message || 'Invalid input' };
+  }
   try {
     const [draft] = await db
       .insert(videoDrafts)
@@ -36,6 +58,11 @@ export async function createVideoDraft(data: {
 }
 
 export async function updateVideoDraft(draftId: string, propsJson: Record<string, unknown>) {
+  const validation = updateDraftSchema.safeParse(propsJson);
+  if (!validation.success) {
+    return { success: false, error: validation.error.issues[0]?.message || 'Invalid input' };
+  }
+  
   try {
     const [draft] = await db
       .update(videoDrafts)

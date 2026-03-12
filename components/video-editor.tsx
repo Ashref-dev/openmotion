@@ -14,6 +14,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Save, Upload } from 'lucide-react';
 
+import { VIDEO_CONFIG } from '@/lib/config';
+
+interface VideoConfig {
+  primaryColor?: string;
+  bgStyle?: 'gradient' | 'solid';
+  supportedRatios?: string[];
+  scenes?: unknown[];
+  assets?: { url: string; type: 'screenshot' | 'logo' }[];
+}
+
 interface VideoAsset {
   id: string;
   type: string;
@@ -62,8 +72,8 @@ export function VideoEditor({ draft, projectId }: VideoEditorProps) {
     }));
   }, [draft.project]);
 
-  const currentConfig = useMemo(() => {
-    const defaultConfig = draft.template?.defaultConfigJson || {};
+  const currentConfig = useMemo((): VideoConfig => {
+    const defaultConfig = (draft.template?.defaultConfigJson || {}) as VideoConfig;
     return {
       ...defaultConfig,
       ...propsJson,
@@ -71,17 +81,11 @@ export function VideoEditor({ draft, projectId }: VideoEditorProps) {
     };
   }, [draft.template, propsJson, assets]);
 
+  const typedConfig = currentConfig as VideoConfig;
+
   const dimensions = useMemo(() => {
-    switch (ratio) {
-      case '9:16':
-        return { width: 1080, height: 1920 };
-      case '16:9':
-        return { width: 1920, height: 1080 };
-      case '1:1':
-        return { width: 1080, height: 1080 };
-      default:
-        return { width: 1920, height: 1080 };
-    }
+    return VIDEO_CONFIG.aspectRatios[ratio as keyof typeof VIDEO_CONFIG.aspectRatios] 
+      || VIDEO_CONFIG.aspectRatios['16:9'];
   }, [ratio]);
 
   async function handleSave() {
@@ -128,7 +132,7 @@ export function VideoEditor({ draft, projectId }: VideoEditorProps) {
             <CardTitle>Preview</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="bg-black rounded-lg overflow-hidden">
+            <div className="rounded-2xl overflow-hidden border border-border/60 bg-black/95 shadow-[0_20px_40px_-30px_rgba(14,8,30,0.7)]">
               <Player
                 component={DynamicVideo}
                 inputProps={currentConfig as DynamicVideoProps}
@@ -154,7 +158,7 @@ export function VideoEditor({ draft, projectId }: VideoEditorProps) {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-4">
-              <h3 className="font-semibold">Video Settings</h3>
+              <h3 className="font-display text-base font-semibold">Video Settings</h3>
 
               <div className="space-y-2">
                 <Label>Aspect Ratio</Label>
@@ -163,13 +167,11 @@ export function VideoEditor({ draft, projectId }: VideoEditorProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {draft.template?.defaultConfigJson &&
-                      (draft.template.defaultConfigJson as { supportedRatios?: string[] })
-                        .supportedRatios?.map((r) => (
-                          <SelectItem key={r} value={r}>
-                            {r}
-                          </SelectItem>
-                        ))}
+                    {typedConfig.supportedRatios?.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {r}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -180,8 +182,8 @@ export function VideoEditor({ draft, projectId }: VideoEditorProps) {
                   type="number"
                   value={durationInFrames}
                   onChange={(e) => setDurationInFrames(Number(e.target.value))}
-                  min={30}
-                  max={1800}
+                  min={VIDEO_CONFIG.duration.minFrames}
+                  max={VIDEO_CONFIG.duration.maxFrames}
                 />
                 <p className="text-xs text-muted-foreground">
                   {(durationInFrames / fps).toFixed(1)} seconds at {fps}fps
@@ -195,9 +197,11 @@ export function VideoEditor({ draft, projectId }: VideoEditorProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="24">24 FPS (Film)</SelectItem>
-                    <SelectItem value="30">30 FPS (Standard)</SelectItem>
-                    <SelectItem value="60">60 FPS (Smooth)</SelectItem>
+                    {VIDEO_CONFIG.fps.options.map((fpsOption) => (
+                      <SelectItem key={fpsOption} value={String(fpsOption)}>
+                        {fpsOption} FPS ({VIDEO_CONFIG.fps.labels[fpsOption]})
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -206,22 +210,22 @@ export function VideoEditor({ draft, projectId }: VideoEditorProps) {
             <Separator />
 
             <div className="space-y-4">
-              <h3 className="font-semibold">Template Properties</h3>
+              <h3 className="font-display text-base font-semibold">Template Properties</h3>
 
               <div className="space-y-2">
                 <Label>Primary Color</Label>
                 <div className="flex gap-2">
                   <Input
                     type="color"
-                    value={String((currentConfig as any).primaryColor || '#6C5CE7')}
+                    value={typedConfig.primaryColor || VIDEO_CONFIG.colors.defaultPrimary}
                     onChange={(e) => handlePropChange('primaryColor', e.target.value)}
                     className="w-20 h-10"
                   />
                   <Input
                     type="text"
-                    value={String((currentConfig as any).primaryColor || '#6C5CE7')}
+                    value={typedConfig.primaryColor || VIDEO_CONFIG.colors.defaultPrimary}
                     onChange={(e) => handlePropChange('primaryColor', e.target.value)}
-                    placeholder="#6C5CE7"
+                    placeholder={VIDEO_CONFIG.colors.defaultPrimary}
                   />
                 </div>
               </div>
@@ -229,7 +233,7 @@ export function VideoEditor({ draft, projectId }: VideoEditorProps) {
               <div className="space-y-2">
                 <Label>Background Style</Label>
                 <Select
-                  value={String((currentConfig as any).bgStyle || 'gradient')}
+                  value={typedConfig.bgStyle || 'gradient'}
                   onValueChange={(v) => handlePropChange('bgStyle', v)}
                 >
                   <SelectTrigger>
@@ -268,9 +272,9 @@ export function VideoEditor({ draft, projectId }: VideoEditorProps) {
               {assets.length} asset{assets.length !== 1 ? 's' : ''} loaded
             </p>
             <div className="mt-4 grid grid-cols-2 gap-2">
-              {assets.slice(0, 4).map((asset, idx) => (
-                <div key={idx} className="relative aspect-video rounded overflow-hidden border">
-                  <img src={asset.url} alt={`Asset ${idx + 1}`} className="w-full h-full object-cover" />
+              {assets.slice(0, 4).map((asset) => (
+                <div key={asset.url} className="relative aspect-video rounded overflow-hidden border">
+                  <img src={asset.url} alt="Asset preview" className="w-full h-full object-cover" />
                 </div>
               ))}
             </div>

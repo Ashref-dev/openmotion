@@ -4,8 +4,17 @@ import { db } from '@/lib/db';
 import { projects } from '@/lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
+
+const createProjectSchema = z.object({
+  name: z.string().min(1, 'Project name is required').max(100, 'Project name too long'),
+});
 
 export async function createProject(name: string) {
+  const validation = createProjectSchema.safeParse({ name });
+  if (!validation.success) {
+    return { success: false, error: validation.error.issues[0]?.message || 'Invalid input' };
+  }
   try {
     const [project] = await db
       .insert(projects)

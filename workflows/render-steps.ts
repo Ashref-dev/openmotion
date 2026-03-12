@@ -3,6 +3,7 @@ import { videoDrafts } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { bundle } from "@remotion/bundler";
 import { getCompositions, renderMedia, makeCancelSignal } from "@remotion/renderer";
+import type { VideoConfig } from "remotion/no-react";
 import path from "path";
 import { FatalError } from "workflow";
 import fs from "fs/promises";
@@ -69,7 +70,7 @@ export async function selectCompositionStep(
 
 export async function renderMediaStep(
   bundleLocation: string,
-  composition: any,
+  composition: VideoConfig,
   inputProps: Record<string, unknown>,
   videoDraftId: string
 ) {

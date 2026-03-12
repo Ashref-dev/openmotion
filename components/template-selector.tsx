@@ -35,12 +35,17 @@ const TEMPLATES: Template[] = [
   { id: 't4-smooth-carousel', name: 'Smooth Carousel', category: 'landing-showcase', minScreens: 3, maxScreens: 8, ratios: ['9:16', '16:9'] },
   { id: 't5-stack-reveal', name: 'Stack Reveal', category: 'landing-showcase', minScreens: 3, maxScreens: 6, ratios: ['9:16', '16:9', '1:1'] },
   { id: 't6-split-showcase', name: 'Split Showcase', category: 'landing-showcase', minScreens: 4, maxScreens: 8, ratios: ['16:9', '1:1'] },
-  { id: 't7-logo-hero', name: 'Logo → Hero', category: 'brand-product', minScreens: 1, maxScreens: 3, ratios: ['9:16', '16:9', '1:1'] },
+  { id: 't7-logo-hero', name: 'Logo -> Hero', category: 'brand-product', minScreens: 1, maxScreens: 3, ratios: ['9:16', '16:9', '1:1'] },
   { id: 't8-brand-carousel', name: 'Brand Carousel', category: 'brand-product', minScreens: 4, maxScreens: 10, ratios: ['9:16', '16:9'] },
   { id: 't9-clean-endcard', name: 'Clean End Card', category: 'brand-product', minScreens: 2, maxScreens: 5, ratios: ['9:16', '16:9', '1:1'] },
   { id: 't10-7sec-reel', name: '7-Second Reel', category: 'fast-reels', minScreens: 3, maxScreens: 5, ratios: ['9:16'] },
   { id: 't11-feature-beats', name: 'Feature Beats', category: 'fast-reels', minScreens: 4, maxScreens: 8, ratios: ['9:16', '1:1'] },
   { id: 't12-dark-premium', name: 'Dark Premium', category: 'fast-reels', minScreens: 3, maxScreens: 6, ratios: ['16:9', '1:1'] },
+  { id: 't13-tech-launch', name: 'Tech Startup Launch', category: 'tech-showcase', minScreens: 2, maxScreens: 5, ratios: ['16:9', '1:1'] },
+  { id: 't14-saas-features', name: 'SaaS Feature Showcase', category: 'tech-showcase', minScreens: 3, maxScreens: 6, ratios: ['16:9', '9:16'] },
+  { id: 't15-product-demo', name: 'Product Demo Reel', category: 'tech-showcase', minScreens: 2, maxScreens: 4, ratios: ['16:9'] },
+  { id: 't16-api-docs', name: 'API Documentation', category: 'tech-showcase', minScreens: 1, maxScreens: 3, ratios: ['16:9', '1:1'] },
+  { id: 't17-dev-tool', name: 'Developer Tool Promo', category: 'tech-showcase', minScreens: 2, maxScreens: 6, ratios: ['16:9', '9:16'] },
 ];
 
 export function TemplateSelector({ projectId, assets }: TemplateSelectorProps) {
@@ -108,14 +113,17 @@ export function TemplateSelector({ projectId, assets }: TemplateSelectorProps) {
 
       {Object.entries(groupedTemplates).map(([category, templates]) => (
         <div key={category}>
-          <h3 className="text-lg font-semibold mb-4 capitalize">
+          <h3 className="font-display text-lg font-semibold mb-4 capitalize">
             {category.replace('-', ' ')}
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {templates.map((template) => {
               const canUse = assets.length >= template.minScreens;
               return (
-                <Card key={template.id} className={!canUse ? 'opacity-50' : ''}>
+                <Card
+                  key={template.id}
+                  className={`transition-all duration-200 ${!canUse ? 'opacity-50' : 'hover:-translate-y-0.5 hover:shadow-[0_22px_45px_-32px_rgba(22,12,51,0.5)]'}`}
+                >
                   <CardHeader>
                     <CardTitle>{template.name}</CardTitle>
                     <CardDescription>

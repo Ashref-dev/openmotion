@@ -27,7 +27,14 @@ export async function readFile(key: string): Promise<Buffer> {
 
 export async function deleteFile(key: string): Promise<void> {
   const fullPath = path.join(STORAGE_BASE, key.replace('/uploads/', ''));
-  await fs.unlink(fullPath).catch(() => {});
+  try {
+    await fs.unlink(fullPath);
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code !== 'ENOENT') {
+      console.error(`[Storage] Failed to delete file ${key}:`, err.message);
+    }
+  }
 }
 
 export async function fileExists(key: string): Promise<boolean> {

@@ -24,7 +24,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   const { project } = result;
 
   return (
-    <div className="container mx-auto py-8 px-4">
+    <div className="container mx-auto py-10 px-4">
       <div className="mb-6">
         <Link href="/projects">
           <Button variant="ghost" size="sm">
@@ -35,8 +35,10 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       </div>
 
       <div className="mb-8">
-        <h1 className="text-4xl font-bold">{project.name}</h1>
-        <p className="text-muted-foreground mt-2">
+        <h1 className="font-display text-4xl md:text-5xl font-semibold tracking-tight">
+          {project.name}
+        </h1>
+        <p className="text-muted-foreground mt-3">
           Created {new Date(project.createdAt).toLocaleDateString()}
         </p>
       </div>

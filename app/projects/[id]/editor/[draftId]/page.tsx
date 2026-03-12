@@ -20,7 +20,7 @@ export default async function EditorPage({ params }: EditorPageProps) {
   const { draft } = result;
 
   return (
-    <div className="container mx-auto py-8 px-4">
+    <div className="container mx-auto py-10 px-4">
       <div className="mb-6 flex items-center justify-between">
         <Link href={`/projects/${id}`}>
           <Button variant="ghost" size="sm">
