@@ -2,6 +2,7 @@
 
 import { db } from '@/lib/db';
 import { projects } from '@/lib/db/schema';
+import { getPublicUrl } from '@/lib/storage';
 import { desc, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
@@ -50,8 +51,12 @@ export async function getProjectById(projectId: string) {
       with: {
         assets: true,
         videoDrafts: {
+          orderBy: (drafts, { desc }) => [desc(drafts.updatedAt)],
           with: {
             template: true,
+            renderJobs: {
+              orderBy: (jobs, { desc }) => [desc(jobs.startedAt)],
+            },
           },
         },
       },
@@ -61,7 +66,22 @@ export async function getProjectById(projectId: string) {
       return { success: false, error: 'Project not found' };
     }
 
-    return { success: true, project };
+    return {
+      success: true,
+      project: {
+        ...project,
+        assets: project.assets.map((asset) => ({
+          ...asset,
+          previewUrl: getPublicUrl(asset.processedS3Key || asset.originalS3Key),
+          sourceUrl: getPublicUrl(asset.originalS3Key),
+        })),
+        videoDrafts: project.videoDrafts.map((draft) => ({
+          ...draft,
+          outputUrl: draft.outputS3Key ? getPublicUrl(draft.outputS3Key) : null,
+          posterUrl: draft.posterKey ? getPublicUrl(draft.posterKey) : null,
+        })),
+      },
+    };
   } catch (error) {
     console.error('Failed to get project:', error);
     return { success: false, error: 'Failed to get project' };

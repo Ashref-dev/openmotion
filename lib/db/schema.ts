@@ -13,7 +13,7 @@ export const projects = pgTable('projects', {
 export const assets = pgTable('assets', {
   id: uuid('id').defaultRandom().primaryKey(),
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
-  type: varchar('type', { length: 20 }).notNull(), // screenshot | logo | background
+  type: varchar('type', { length: 20 }).notNull(), // screenshot | logo | background | audio
   originalS3Key: text('original_s3_key').notNull(),
   processedS3Key: text('processed_s3_key'),
   width: integer('width').notNull(),
@@ -43,9 +43,12 @@ export const videoDrafts = pgTable('video_drafts', {
   ratio: varchar('ratio', { length: 10 }).notNull(), // 9:16 | 16:9 | 1:1
   fps: integer('fps').notNull().default(30),
   durationInFrames: integer('duration_in_frames').notNull(),
+  schemaVersion: text('schema_version').notNull().default('2'),
   propsJson: jsonb('props_json').$type<Record<string, any>>().notNull(),
   status: varchar('status', { length: 20 }).notNull().default('draft'), // draft | rendering | completed | failed | canceled
   outputS3Key: text('output_s3_key'),
+  posterKey: text('poster_key'),
+  lastRenderJobId: uuid('last_render_job_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -54,9 +57,15 @@ export const videoDrafts = pgTable('video_drafts', {
 export const renderJobs = pgTable('render_jobs', {
   id: uuid('id').defaultRandom().primaryKey(),
   videoDraftId: uuid('video_draft_id').references(() => videoDrafts.id, { onDelete: 'cascade' }).notNull(),
-  workflowRunId: text('workflow_run_id').notNull(),
+  workflowRunId: text('workflow_run_id'),
+  status: varchar('status', { length: 20 }).notNull().default('queued'), // queued | running | completed | failed | canceled
   progress: integer('progress').notNull().default(0), // 0-100
-  stage: text('stage').notNull(), // bundling | rendering | encoding | uploading | completed | failed | canceled
+  stage: text('stage').notNull().default('queued'), // queued | validating | bundling | rendering | uploading | completed | failed | canceled
+  attemptCount: integer('attempt_count').notNull().default(0),
+  leaseExpiresAt: timestamp('lease_expires_at'),
+  errorMessage: text('error_message'),
+  outputKey: text('output_key'),
+  posterKey: text('poster_key'),
   logsJson: jsonb('logs_json').$type<string[]>().default([]),
   errorJson: jsonb('error_json').$type<Record<string, any>>(),
   startedAt: timestamp('started_at').defaultNow().notNull(),

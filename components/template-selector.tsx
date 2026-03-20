@@ -1,16 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { AlertCircle, ArrowRight } from 'lucide-react';
+import { createVideoDraft } from '@/app/actions/video-drafts';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { createVideoDraft } from '@/app/actions/video-drafts';
-import { AlertCircle } from 'lucide-react';
+import { listSupportedTemplates } from '@/lib/video/template-catalog';
 
 interface Asset {
   id: string;
   aspectRatio: string;
+  type: string;
 }
 
 interface TemplateSelectorProps {
@@ -18,143 +20,121 @@ interface TemplateSelectorProps {
   assets: Asset[];
 }
 
-// Template definitions - MUST match lib/db/seed/templates.ts
-interface Template {
-  id: string;
-  name: string;
-  category: string;
-  minScreens: number;
-  maxScreens: number;
-  ratios: string[];
-}
-
-const TEMPLATES: Template[] = [
-  { id: 't1-hero-drift', name: 'Hero Drift', category: 'minimal-hero', minScreens: 1, maxScreens: 3, ratios: ['9:16', '16:9', '1:1'] },
-  { id: 't2-hero-copy', name: 'Hero Copy', category: 'minimal-hero', minScreens: 1, maxScreens: 2, ratios: ['9:16', '16:9', '1:1'] },
-  { id: 't3-hero-zoomcut', name: 'Hero ZoomCut', category: 'minimal-hero', minScreens: 2, maxScreens: 4, ratios: ['9:16', '16:9', '1:1'] },
-  { id: 't4-smooth-carousel', name: 'Smooth Carousel', category: 'landing-showcase', minScreens: 3, maxScreens: 8, ratios: ['9:16', '16:9'] },
-  { id: 't5-stack-reveal', name: 'Stack Reveal', category: 'landing-showcase', minScreens: 3, maxScreens: 6, ratios: ['9:16', '16:9', '1:1'] },
-  { id: 't6-split-showcase', name: 'Split Showcase', category: 'landing-showcase', minScreens: 4, maxScreens: 8, ratios: ['16:9', '1:1'] },
-  { id: 't7-logo-hero', name: 'Logo -> Hero', category: 'brand-product', minScreens: 1, maxScreens: 3, ratios: ['9:16', '16:9', '1:1'] },
-  { id: 't8-brand-carousel', name: 'Brand Carousel', category: 'brand-product', minScreens: 4, maxScreens: 10, ratios: ['9:16', '16:9'] },
-  { id: 't9-clean-endcard', name: 'Clean End Card', category: 'brand-product', minScreens: 2, maxScreens: 5, ratios: ['9:16', '16:9', '1:1'] },
-  { id: 't10-7sec-reel', name: '7-Second Reel', category: 'fast-reels', minScreens: 3, maxScreens: 5, ratios: ['9:16'] },
-  { id: 't11-feature-beats', name: 'Feature Beats', category: 'fast-reels', minScreens: 4, maxScreens: 8, ratios: ['9:16', '1:1'] },
-  { id: 't12-dark-premium', name: 'Dark Premium', category: 'fast-reels', minScreens: 3, maxScreens: 6, ratios: ['16:9', '1:1'] },
-  { id: 't13-tech-launch', name: 'Tech Startup Launch', category: 'tech-showcase', minScreens: 2, maxScreens: 5, ratios: ['16:9', '1:1'] },
-  { id: 't14-saas-features', name: 'SaaS Feature Showcase', category: 'tech-showcase', minScreens: 3, maxScreens: 6, ratios: ['16:9', '9:16'] },
-  { id: 't15-product-demo', name: 'Product Demo Reel', category: 'tech-showcase', minScreens: 2, maxScreens: 4, ratios: ['16:9'] },
-  { id: 't16-api-docs', name: 'API Documentation', category: 'tech-showcase', minScreens: 1, maxScreens: 3, ratios: ['16:9', '1:1'] },
-  { id: 't17-dev-tool', name: 'Developer Tool Promo', category: 'tech-showcase', minScreens: 2, maxScreens: 6, ratios: ['16:9', '9:16'] },
-];
-
 export function TemplateSelector({ projectId, assets }: TemplateSelectorProps) {
-  const [loading, setLoading] = useState(false);
+  const [loadingTemplateId, setLoadingTemplateId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
+  const imageAssets = useMemo(() => assets.filter((asset) => asset.type !== 'audio'), [assets]);
+  const templatesByCategory = useMemo(() => {
+    return listSupportedTemplates().reduce<Record<string, ReturnType<typeof listSupportedTemplates>>>(
+      (acc, template) => {
+        if (!acc[template.category]) {
+          acc[template.category] = [];
+        }
+        acc[template.category].push(template);
+        return acc;
+      },
+      {}
+    );
+  }, []);
+
   async function handleSelectTemplate(templateId: string) {
-    const template = TEMPLATES.find((t) => t.id === templateId);
-    if (!template) return;
-
-    if (assets.length < template.minScreens) {
-      setError(`This template requires at least ${template.minScreens} images. Please upload more.`);
-      return;
-    }
-
-    const ratio = assets[0]?.aspectRatio || '16:9';
-    const selectedAssets = assets.slice(0, template.maxScreens);
-
-    const propsJson = {
-      templateId,
-      assetUrls: selectedAssets.map((a) => a.id),
-      ratio,
-    };
-
-    setLoading(true);
+    setLoadingTemplateId(templateId);
     setError(null);
-    
+
     const result = await createVideoDraft({
       projectId,
       templateId,
-      ratio,
-      durationInFrames: 300,
-      propsJson,
     });
-    setLoading(false);
+
+    setLoadingTemplateId(null);
 
     if (result.success && result.draft) {
       router.push(`/projects/${projectId}/editor/${result.draft.id}`);
-    } else {
-      setError(result.error || 'Failed to create video draft. Please try again.');
+      return;
     }
+
+    setError(result.error || 'Failed to create video draft.');
   }
 
-  const groupedTemplates = TEMPLATES.reduce((acc, template) => {
-    if (!acc[template.category]) acc[template.category] = [];
-    acc[template.category].push(template);
-    return acc;
-  }, {} as Record<string, Template[]>);
+  if (imageAssets.length === 0) {
+    return (
+      <div className="rounded-3xl border border-dashed border-border/70 bg-card/60 px-6 py-12 text-center text-sm text-muted-foreground">
+        Upload at least one image before choosing a template.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
-      {error && (
-        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-4 rounded-md mb-6">
-          <AlertCircle className="h-5 w-5 flex-shrink-0" />
+      {error ? (
+        <div className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AlertCircle className="h-4 w-4 flex-none" />
           <span>{error}</span>
         </div>
-      )}
-      
-      {assets.length === 0 && !error && (
-        <p className="text-muted-foreground text-center py-8">
-          Upload at least one image to choose a template
-        </p>
-      )}
+      ) : null}
 
-      {Object.entries(groupedTemplates).map(([category, templates]) => (
-        <div key={category}>
-          <h3 className="font-display text-lg font-semibold mb-4 capitalize">
-            {category.replace('-', ' ')}
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {Object.entries(templatesByCategory).map(([category, templates]) => (
+        <section key={category} className="space-y-4">
+          <div>
+            <h3 className="font-display text-xl font-semibold tracking-tight">{category}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Purpose-built presets with a shared render pipeline and editable timeline.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {templates.map((template) => {
-              const canUse = assets.length >= template.minScreens;
+              const canUse = imageAssets.length >= template.minScreens;
+              const isLoading = loadingTemplateId === template.id;
+
               return (
                 <Card
                   key={template.id}
-                  className={`transition-all duration-200 ${!canUse ? 'opacity-50' : 'hover:-translate-y-0.5 hover:shadow-[0_22px_45px_-32px_rgba(22,12,51,0.5)]'}`}
+                  className={`group h-full border-border/70 bg-card/85 transition-all duration-200 ${
+                    canUse ? 'hover:-translate-y-0.5 hover:shadow-[0_26px_70px_-36px_rgba(13,10,27,0.52)]' : 'opacity-60'
+                  }`}
                 >
-                  <CardHeader>
-                    <CardTitle>{template.name}</CardTitle>
-                    <CardDescription>
-                      {template.minScreens === template.maxScreens
-                        ? `${template.minScreens} images`
-                        : `${template.minScreens}-${template.maxScreens} images`}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between">
-                      <div className="flex gap-2">
-                        {template.ratios.map((r) => (
-                          <Badge key={r} variant="outline">
-                            {r}
-                          </Badge>
-                        ))}
+                  <CardHeader className="space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <CardTitle>{template.name}</CardTitle>
+                        <CardDescription className="mt-2 leading-6">{template.description}</CardDescription>
                       </div>
-                      <Button
-                        size="sm"
-                        disabled={!canUse || loading}
-                        onClick={() => handleSelectTemplate(template.id)}
-                      >
-                        Use
-                      </Button>
+                      <Badge variant="outline">{template.category}</Badge>
                     </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                      {template.supportedRatios.map((ratio) => (
+                        <Badge key={ratio} variant="secondary">
+                          {ratio}
+                        </Badge>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>
+                        {template.minScreens}-{template.maxScreens} images
+                      </span>
+                      <span>{imageAssets.length} available</span>
+                    </div>
+
+                    <Button
+                      className="w-full"
+                      disabled={!canUse || isLoading}
+                      onClick={() => handleSelectTemplate(template.id)}
+                    >
+                      {isLoading ? 'Creating draft...' : 'Open in editor'}
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
                   </CardContent>
                 </Card>
               );
             })}
           </div>
-        </div>
+        </section>
       ))}
     </div>
   );

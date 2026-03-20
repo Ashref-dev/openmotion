@@ -1,20 +1,14 @@
 'use server';
 
-import { start } from 'workflow/api';
-import { renderVideoWorkflow } from '@/workflows/render-video';
-import { db } from '@/lib/db';
-import { videoDrafts, renderJobs } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { db } from '@/lib/db';
+import { renderJobs, videoDrafts } from '@/lib/db/schema';
+import { cancelRenderJob, createRenderJob, getRenderJob } from '@/lib/render-jobs';
+import { getPublicUrl } from '@/lib/storage';
 
 export async function startExport(videoDraftId: string) {
   try {
-    console.log('[DEBUG] Starting export for videoDraftId:', videoDraftId);
-    console.log('[DEBUG] renderVideoWorkflow type:', typeof renderVideoWorkflow);
-    console.log('[DEBUG] renderVideoWorkflow name:', renderVideoWorkflow?.name);
-    console.log('[DEBUG] renderVideoWorkflow.workflowId:', (renderVideoWorkflow as any)?.workflowId);
-    console.log('[DEBUG] globalThis.__private_workflows:', typeof (globalThis as any).__private_workflows);
-    
     const draft = await db.query.videoDrafts.findFirst({
       where: eq(videoDrafts.id, videoDraftId),
     });
@@ -23,85 +17,37 @@ export async function startExport(videoDraftId: string) {
       return { success: false, error: 'Draft not found' };
     }
 
-    if (draft.status === 'rendering') {
-      return { success: false, error: 'Export already in progress' };
-    }
-
-    await db
-      .update(videoDrafts)
-      .set({ status: 'rendering', updatedAt: new Date() })
-      .where(eq(videoDrafts.id, videoDraftId));
-
-    console.log('[DEBUG] About to call start() with workflow');
-    
-    const workflowId = 'workflow//workflows/render-video.ts//renderVideoWorkflow';
-    const registeredWorkflow = (globalThis as any).__private_workflows?.get(workflowId);
-    console.log('[DEBUG] Registered workflow found:', !!registeredWorkflow);
-    
-    const workflowToUse = registeredWorkflow || renderVideoWorkflow;
-    
-    if (!(workflowToUse as any).workflowId) {
-      console.log('[DEBUG] Adding workflowId manually');
-      (workflowToUse as any).workflowId = workflowId;
-    }
-    
-    console.log('[DEBUG] workflowToUse.workflowId:', (workflowToUse as any).workflowId);
-    const run = await start(workflowToUse, [{ videoDraftId }]);
-    console.log('[DEBUG] Workflow started successfully, runId:', run.runId);
-
-    const [job] = await db
-      .insert(renderJobs)
-      .values({
-        videoDraftId,
-        workflowRunId: run.runId,
-        progress: 0,
-        stage: 'bundling',
-      })
-      .returning();
-
+    const { job, reused } = await createRenderJob(videoDraftId);
     revalidatePath(`/projects/${draft.projectId}`);
-    return { success: true, runId: run.runId, jobId: job.id };
+    revalidatePath(`/projects/${draft.projectId}/render/${job.id}`);
+
+    return {
+      success: true,
+      jobId: job.id,
+      reused,
+    };
   } catch (error) {
     console.error('Failed to start export:', error);
-    
-    await db
-      .update(videoDrafts)
-      .set({ status: 'failed', updatedAt: new Date() })
-      .where(eq(videoDrafts.id, videoDraftId));
-
-    return { success: false, error: 'Failed to start export' };
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to start export',
+    };
   }
 }
 
-export async function cancelExport(runId: string) {
+export async function cancelExport(jobId: string) {
   try {
-    const job = await db.query.renderJobs.findFirst({
-      where: eq(renderJobs.workflowRunId, runId),
-    });
+    const job = await getRenderJob(jobId);
 
-    if (job) {
-      await db
-        .update(renderJobs)
-        .set({
-          stage: 'canceled',
-          finishedAt: new Date(),
-        })
-        .where(eq(renderJobs.id, job.id));
-
-      await db
-        .update(videoDrafts)
-        .set({ status: 'canceled', updatedAt: new Date() })
-        .where(eq(videoDrafts.id, job.videoDraftId));
-
-      const draft = await db.query.videoDrafts.findFirst({
-        where: eq(videoDrafts.id, job.videoDraftId),
-      });
-
-      if (draft) {
-        revalidatePath(`/projects/${draft.projectId}`);
-      }
+    if (!job) {
+      return { success: false, error: 'Render job not found' };
     }
 
+    if (job.status === 'running') {
+      return { success: false, error: 'Running renders cannot be canceled in this MVP yet' };
+    }
+
+    await cancelRenderJob(jobId);
     return { success: true };
   } catch (error) {
     console.error('Failed to cancel export:', error);
@@ -109,11 +55,9 @@ export async function cancelExport(runId: string) {
   }
 }
 
-export async function getExportStatus(runId: string) {
+export async function getExportStatus(jobId: string) {
   try {
-    const job = await db.query.renderJobs.findFirst({
-      where: eq(renderJobs.workflowRunId, runId),
-    });
+    const job = await getRenderJob(jobId);
 
     return {
       success: true,
@@ -127,10 +71,10 @@ export async function getExportStatus(runId: string) {
 
 export async function getRenderJobsByDraft(videoDraftId: string) {
   try {
-    const jobs = await db
-      .select()
-      .from(renderJobs)
-      .where(eq(renderJobs.videoDraftId, videoDraftId));
+    const jobs = await db.query.renderJobs.findMany({
+      where: eq(renderJobs.videoDraftId, videoDraftId),
+      orderBy: (table, { desc }) => [desc(table.startedAt)],
+    });
 
     return { success: true, jobs };
   } catch (error) {
@@ -154,10 +98,10 @@ export async function getVideoDownloadUrl(videoDraftId: string) {
     }
 
     const filename = `video-${videoDraftId.slice(0, 8)}.mp4`;
-    
-    return { 
-      success: true, 
-      url: `/uploads/renders/${videoDraftId}.mp4`,
+
+    return {
+      success: true,
+      url: getPublicUrl(draft.outputS3Key),
       filename,
     };
   } catch (error) {

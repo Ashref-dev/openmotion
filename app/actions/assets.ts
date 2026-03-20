@@ -1,12 +1,17 @@
 'use server';
 
+import crypto from 'crypto';
+import { eq } from 'drizzle-orm';
+import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db';
 import { assets } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
-import { saveFile, deleteFile, fileExists } from '@/lib/storage/local';
+import { deleteFile, fileExists, saveFile } from '@/lib/storage';
 import { processImage } from '@/lib/storage/image-processor';
-import { revalidatePath } from 'next/cache';
-import crypto from 'crypto';
+
+function getFileExtension(filename: string, fallback: string) {
+  const extension = filename.split('.').pop();
+  return extension && extension.length <= 10 ? extension : fallback;
+}
 
 export async function uploadAsset(formData: FormData) {
   try {
@@ -20,36 +25,28 @@ export async function uploadAsset(formData: FormData) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const hash = crypto.createHash('sha256').update(buffer).digest('hex');
-
-    const existingAsset = await db.query.assets.findFirst({
+    const duplicateAsset = await db.query.assets.findFirst({
       where: eq(assets.hash, hash),
     });
 
-    let originalKey: string;
+    const extension = getFileExtension(file.name, type === 'audio' ? 'mp3' : 'jpg');
+    const originalFilename = `${crypto.randomUUID()}.${extension}`;
+    const originalKey = await saveFile(buffer, originalFilename, 'original');
+
     let processedKey: string | null = null;
-    let processedResult: { width: number; height: number; aspectRatio: string; processedBuffer: Buffer };
+    let width = 0;
+    let height = 0;
+    let aspectRatio = 'audio';
 
-    if (existingAsset) {
-      originalKey = existingAsset.originalS3Key;
-      processedKey = existingAsset.processedS3Key ?? existingAsset.originalS3Key;
-      processedResult = {
-        width: existingAsset.width,
-        height: existingAsset.height,
-        aspectRatio: existingAsset.aspectRatio,
-        processedBuffer: Buffer.from([]),
-      };
-    } else {
-      const fileExtension = file.name.split('.').pop() || 'jpg';
-      const originalFilename = `${crypto.randomUUID()}.${fileExtension}`;
-      
-      originalKey = await saveFile(buffer, originalFilename, 'original');
-
-      processedResult = await processImage(buffer);
+    if (type !== 'audio') {
+      const processedResult = await processImage(buffer);
       const processedFilename = `${crypto.randomUUID()}.jpg`;
       processedKey = await saveFile(processedResult.processedBuffer, processedFilename, 'processed');
+      width = processedResult.width;
+      height = processedResult.height;
+      aspectRatio = processedResult.aspectRatio;
     }
-    
-    // Always create a new asset record for this project
+
     const [asset] = await db
       .insert(assets)
       .values({
@@ -57,15 +54,15 @@ export async function uploadAsset(formData: FormData) {
         type,
         originalS3Key: originalKey,
         processedS3Key: processedKey,
-        width: processedResult.width,
-        height: processedResult.height,
-        aspectRatio: processedResult.aspectRatio,
+        width,
+        height,
+        aspectRatio,
         hash,
       })
       .returning();
 
     revalidatePath(`/projects/${projectId}`);
-    return { success: true, asset, duplicate: !!existingAsset };
+    return { success: true, asset, duplicate: Boolean(duplicateAsset) };
   } catch (error) {
     console.error('Failed to upload asset:', error);
     return { success: false, error: 'Failed to upload asset' };

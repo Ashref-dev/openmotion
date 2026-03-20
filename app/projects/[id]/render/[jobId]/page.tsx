@@ -6,12 +6,12 @@ import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
 interface RenderPageProps {
-  params: Promise<{ id: string; runId: string }>;
+  params: Promise<{ id: string; jobId: string }>;
 }
 
 export default async function RenderPage({ params }: RenderPageProps) {
-  const { id, runId } = await params;
-  const result = await getExportStatus(runId);
+  const { id, jobId } = await params;
+  const result = await getExportStatus(jobId);
 
   if (!result.success) {
     notFound();
@@ -30,7 +30,7 @@ export default async function RenderPage({ params }: RenderPageProps) {
         </Link>
       </div>
 
-      <RenderStatusClient job={job} runId={runId} videoDraftId={job?.videoDraftId || ''} />
+      <RenderStatusClient job={job} jobId={jobId} videoDraftId={job?.videoDraftId || ''} />
     </div>
   );
 }

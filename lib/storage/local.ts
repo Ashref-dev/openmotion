@@ -1,62 +1,65 @@
+import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
-import crypto from 'crypto';
+
+export type StorageFileCategory = 'original' | 'processed' | 'renders' | 'posters';
 
 const STORAGE_BASE = path.join(process.cwd(), 'public/uploads');
 
-export async function saveFile(
+function toDiskPath(key: string) {
+  return path.join(STORAGE_BASE, key.replace(/^\/uploads\//, ''));
+}
+
+export async function saveLocalFile(
   buffer: Buffer,
   filename: string,
-  type: 'original' | 'processed' | 'renders'
+  type: StorageFileCategory
 ): Promise<string> {
   const hash = crypto.createHash('sha256').update(buffer).digest('hex').substring(0, 16);
-  const ext = path.extname(filename);
-  const key = `${type}/${hash}${ext}`;
-  const fullPath = path.join(STORAGE_BASE, key);
+  const ext = path.extname(filename) || (type === 'posters' ? '.png' : '.bin');
+  const key = `/uploads/${type}/${hash}${ext}`;
+  const fullPath = toDiskPath(key);
 
   await fs.mkdir(path.dirname(fullPath), { recursive: true });
   await fs.writeFile(fullPath, buffer);
 
-  return `/uploads/${key}`;
+  return key;
 }
 
-export async function readFile(key: string): Promise<Buffer> {
-  const fullPath = path.join(STORAGE_BASE, key.replace('/uploads/', ''));
-  return await fs.readFile(fullPath);
+export async function readLocalFile(key: string): Promise<Buffer> {
+  return await fs.readFile(toDiskPath(key));
 }
 
-export async function deleteFile(key: string): Promise<void> {
-  const fullPath = path.join(STORAGE_BASE, key.replace('/uploads/', ''));
+export async function deleteLocalFile(key: string): Promise<void> {
   try {
-    await fs.unlink(fullPath);
+    await fs.unlink(toDiskPath(key));
   } catch (error) {
     const err = error as NodeJS.ErrnoException;
     if (err.code !== 'ENOENT') {
-      console.error(`[Storage] Failed to delete file ${key}:`, err.message);
+      throw error;
     }
   }
 }
 
-export async function fileExists(key: string): Promise<boolean> {
-  const fullPath = path.join(STORAGE_BASE, key.replace('/uploads/', ''));
+export async function localFileExists(key: string): Promise<boolean> {
   try {
-    await fs.access(fullPath);
+    await fs.access(toDiskPath(key));
     return true;
   } catch {
     return false;
   }
 }
 
-export function getPublicUrl(key: string): string {
+export function getLocalPublicUrl(key: string): string {
   return key;
 }
 
-export async function copyFile(sourceKey: string, destKey: string): Promise<string> {
-  const sourcePath = path.join(STORAGE_BASE, sourceKey.replace('/uploads/', ''));
-  const destPath = path.join(STORAGE_BASE, destKey.replace('/uploads/', ''));
+export async function copyLocalFile(sourceKey: string, destKey: string): Promise<string> {
+  const sourcePath = toDiskPath(sourceKey);
+  const targetPath = toDiskPath(destKey);
 
-  await fs.mkdir(path.dirname(destPath), { recursive: true });
-  await fs.copyFile(sourcePath, destPath);
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  await fs.copyFile(sourcePath, targetPath);
 
-  return `/uploads/${destKey}`;
+  return destKey;
 }
